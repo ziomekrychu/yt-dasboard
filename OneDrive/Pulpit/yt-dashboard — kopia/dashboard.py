@@ -2,14 +2,12 @@ import streamlit as st
 import pandas as pd
 from youtube_fetch import fetch_shorts
 from datetime import datetime, timedelta
-from streamlit_autorefresh import st_autorefresh
 
-# Automatyczne odświeżanie co 10 minut (600 000 ms)
-st_autorefresh(interval=600000, key="refresh")
-
+# Ustawienie konfiguracji strony
 st.set_page_config(layout="wide")
 st.title("📺 YouTube Shorts Dashboard")
 
+# Ładowanie danych z pliku channels.txt
 with open("channels.txt") as f:
     channel_ids = [line.strip() for line in f if line.strip()]
 
@@ -24,10 +22,11 @@ def load_data():
             st.warning(f"Błąd kanału {cid}: {e}")
     return pd.DataFrame(all_videos)
 
+# Ładowanie danych
 df = load_data()
 df['date'] = df['published_at'].dt.date
 
-# Sidebar
+# Sidebar - filtry
 st.sidebar.header("🔍 Filtry")
 date_filter = st.sidebar.selectbox("Czas publikacji", ["Wszystko", "Ostatnie 24h", "Ostatni tydzień"])
 if date_filter == "Ostatnie 24h":
@@ -35,14 +34,17 @@ if date_filter == "Ostatnie 24h":
 elif date_filter == "Ostatni tydzień":
     df = df[df["published_at"] > datetime.utcnow() - timedelta(days=7)]
 
+# Filtr słów kluczowych
 keywords = st.sidebar.text_input("🎯 Słowa kluczowe (oddziel przecinkiem)")
 if keywords:
     keyword_list = [k.strip().lower() for k in keywords.split(",")]
     df = df[df["title"].str.lower().apply(lambda x: any(k in x for k in keyword_list))]
 
+# Filtr minimum wyświetleń
 min_views = st.sidebar.number_input("📈 Minimum wyświetleń", min_value=0, value=0)
 df = df[df["views"] >= min_views]
 
+# Sortowanie
 sort_by = st.sidebar.selectbox("Sortuj według", ["Data", "Nazwa kanału", "Długość tytułu", "Hot Score"])
 ascending = st.sidebar.checkbox("Rosnąco", value=False)
 sort_col_map = {
@@ -63,12 +65,15 @@ col1.metric("📅 Dzisiaj", df[df['date'] == today].shape[0])
 col2.metric("📆 Wczoraj", df[df['date'] == yesterday].shape[0])
 col3.metric("🗓️ Ostatnie 7 dni", df[df['date'] >= this_week].shape[0])
 
+# Wykres trendów
 trend = df.groupby("date").size().reset_index(name="liczba filmów")
 st.line_chart(trend.set_index("date"))
 
+# Średnia długość tytułów
 avg_len = df["title_length"].mean()
 st.write(f"✏️ Średnia długość tytułów: **{avg_len:.1f}** znaków")
 
+# Wyniki
 st.subheader("📋 Wyniki")
 for _, row in df.iterrows():
     with st.container():
