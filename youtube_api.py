@@ -9,7 +9,7 @@ def get_youtube_service(api_key):
 
 
 @st.cache_data(ttl=1200)
-def get_latest_videos(_youtube, channel_id, max_results=5):
+def get_latest_videos(_youtube, channel_id, max_results=50):
     uploads_playlist = _youtube.channels().list(
         part="contentDetails",
         id=channel_id
@@ -17,25 +17,39 @@ def get_latest_videos(_youtube, channel_id, max_results=5):
 
     uploads_id = uploads_playlist["items"][0]["contentDetails"]["relatedPlaylists"]["uploads"]
 
-    playlist_items = _youtube.playlistItems().list(
-        part="snippet,contentDetails",
-        playlistId=uploads_id,
-        maxResults=max_results
-    ).execute()
-
     videos = []
-    for item in playlist_items["items"]:
-        video_id = item["contentDetails"]["videoId"]
-        title = item["snippet"]["title"]
-        published_at = item["contentDetails"]["videoPublishedAt"]
-        thumbnail_url = item["snippet"]["thumbnails"]["high"]["url"]
-        videos.append({
-            "video_id": video_id,
-            "title": title,
-            "published_at": published_at,
-            "channel_id": channel_id,
-            "thumbnail": thumbnail_url
-        })
+    next_page_token = None
+    cutoff = datetime.utcnow() - timedelta(days=21)
+
+    while True:
+        playlist_items = _youtube.playlistItems().list(
+            part="snippet,contentDetails",
+            playlistId=uploads_id,
+            maxResults=max_results,
+            pageToken=next_page_token
+        ).execute()
+
+        for item in playlist_items["items"]:
+            video_id = item["contentDetails"]["videoId"]
+            title = item["snippet"]["title"]
+            published_at_str = item["contentDetails"]["videoPublishedAt"]
+            published_at = datetime.strptime(published_at_str, "%Y-%m-%dT%H:%M:%SZ")
+
+            if published_at < cutoff:
+                return videos  # zakończ pętlę, jeśli jesteśmy poza zakresem 21 dni
+
+            thumbnail_url = item["snippet"]["thumbnails"]["high"]["url"]
+            videos.append({
+                "video_id": video_id,
+                "title": title,
+                "published_at": published_at_str,
+                "channel_id": channel_id,
+                "thumbnail": thumbnail_url
+            })
+
+        next_page_token = playlist_items.get("nextPageToken")
+        if not next_page_token:
+            break
 
     return videos
 

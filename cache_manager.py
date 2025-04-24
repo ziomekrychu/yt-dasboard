@@ -3,7 +3,6 @@ import os
 from datetime import datetime, timedelta
 from youtube_api import get_latest_videos, get_video_stats
 
-
 CACHE_PATH = "video_cache.json"
 CACHE_TTL_HOURS = 3
 MAX_VIDEO_AGE_DAYS = 21
@@ -19,16 +18,18 @@ def load_cache():
 
 
 def save_cache(meta, video_dict):
-    # usuń stare filmy z cache
     cutoff = datetime.utcnow() - timedelta(days=MAX_VIDEO_AGE_DAYS)
     cleaned_dict = {
         vid: v for vid, v in video_dict.items()
         if datetime.strptime(v["published_at"], "%Y-%m-%d %H:%M") >= cutoff
     }
-
     all_data = {**cleaned_dict, "_last_check": meta["_last_check"]}
     with open(CACHE_PATH, "w", encoding="utf-8") as f:
         json.dump(all_data, f, indent=2, ensure_ascii=False)
+
+    # 📂 Zapisz również wszystkie dane do osobnego pliku JSON
+    with open("video_cache_export.json", "w", encoding="utf-8") as f:
+        json.dump(cleaned_dict, f, indent=2, ensure_ascii=False)
 
 
 def should_update_cache(meta):
@@ -40,11 +41,17 @@ def update_cache_if_needed(youtube, channel_ids):
     meta, video_dict = load_cache()
 
     if not should_update_cache(meta):
-        return video_dict  # nie odświeżamy, używamy cache
+        print("🟢 Korzystam z cache — aktualizacja niepotrzebna.")
+        return video_dict
+
+    print("🔄 Aktualizacja cache...")
 
     for cid in channel_ids:
         try:
-            new_videos = get_latest_videos(youtube, cid, max_results=3)
+            print(f"📺 Sprawdzam kanał: {cid}")
+            new_videos = get_latest_videos(youtube, cid, max_results=50)
+            print(f"📹 Znaleziono {len(new_videos)} filmów")
+
             for video in new_videos:
                 vid = video["video_id"]
                 pub_dt = datetime.strptime(video["published_at"], "%Y-%m-%dT%H:%M:%SZ")
@@ -65,8 +72,9 @@ def update_cache_if_needed(youtube, channel_ids):
                             "growth": float(row["growth"])
                         }
         except Exception as e:
-            print(f"Błąd przy aktualizacji kanału {cid}: {e}")
+            print(f"❌ Błąd przy aktualizacji kanału {cid}: {e}")
 
     meta["_last_check"] = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S")
     save_cache(meta, video_dict)
+    print("✅ Cache zaktualizowany.")
     return video_dict

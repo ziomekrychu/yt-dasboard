@@ -3,6 +3,7 @@ import pandas as pd
 from youtube_api import get_youtube_service
 from cache_manager import update_cache_if_needed
 from datetime import datetime
+import json
 
 st.set_page_config(page_title="YouTube HotScore Dashboard", layout="wide")
 st.title("📈 YouTube HotScore Dashboard")
@@ -28,6 +29,8 @@ if api_key:
     # 🔄 Wczytaj dane z cache (lub aktualizuj jeśli potrzeba)
     video_dict = update_cache_if_needed(youtube, channel_ids)
     df = pd.DataFrame(video_dict.values())
+
+    st.sidebar.write(f"🎬 Filmy w cache: {len(video_dict)}")
 
     if not df.empty:
         # Sidebar
@@ -55,7 +58,10 @@ if api_key:
         df_filtered = df_filtered[df_filtered["published_at"].apply(
             lambda x: pd.to_datetime(min_date) <= pd.to_datetime(x) <= pd.to_datetime(max_date))]
 
-        # 🔥 Wyświetlanie wyników
+        # 🔥 Wyświetlanie wyników + 💾 Zapis do pliku JSON
+        with open("results.json", "w", encoding="utf-8") as f:
+            json.dump(df_filtered.to_dict(orient="records"), f, ensure_ascii=False, indent=2, default=str)
+
         for _, row in df_filtered.iterrows():
             is_today = pd.to_datetime(row["published_at"]).date() == datetime.today().date()
 
